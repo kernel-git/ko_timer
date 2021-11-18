@@ -37,19 +37,16 @@ const SequenceEditPage = ({ route, navigation }) => {
       phases: [...sequenceData.phases, phase],
     });
 
-  const removePhase = (phaseId) =>
-  {
-    console.log('phaseId', phaseId)
+  const removePhase = (phaseId) => {
     setSequenceData({
       ...sequenceData,
       phases: sequenceData.phases.filter((p) => p.id !== phaseId),
-    })
+    });
   };
 
   const saveChanges = () => {
     setIsLoading(true);
     setError(false);
-    console.log('local data before save', sequenceData);
     storeSequence(
       sequenceId,
       sequenceData,
@@ -57,7 +54,7 @@ const SequenceEditPage = ({ route, navigation }) => {
       (e) => {
         setIsLoading(false);
         setError(true);
-        console.log('save exception', e);
+        console.warn('save exception', e);
       }
     );
   };
@@ -70,6 +67,7 @@ const SequenceEditPage = ({ route, navigation }) => {
     getSequence(
       sequenceId,
       (data) => {
+        console.log(data)
         setSequenceData(data);
         setIsLoading(false);
       },
@@ -77,7 +75,7 @@ const SequenceEditPage = ({ route, navigation }) => {
         setSequenceData({});
         setIsLoading(false);
         setError(true);
-        console.log('exception', e);
+        console.warn('exception', e);
       }
     );
   }, [updateFlag]);
@@ -172,15 +170,18 @@ const SequenceEditPage = ({ route, navigation }) => {
         <ButtonBadge
           badgeType="add"
           size={100}
-          handlePress={() =>
-            addPhase({
-              id: sequenceData.phases[-1].id + 1 || 1,
-              name: `Phase ${sequenceData.phases[-1].id + 1 || 1}`,
-              badge: 'info',
-              color: 'blue',
-              time: '02:42',
-            })
-          }
+          handlePress={() => {
+            if (!isLoading && !error) {
+              const id = parseInt(sequenceData.phases.slice(-1)[0].id, 10) + 1 || 1
+              addPhase({
+                id: id,
+                name: `Phase ${id}`,
+                badge: 'info',
+                color: 'blue',
+                time: '00:05',
+              });
+            }
+          }}
         />
       </PageList>
 

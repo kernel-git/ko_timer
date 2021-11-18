@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ButtonBadge from '../../componenets/ButtonBadge';
 import BackgroundTimer from 'react-native-background-timer';
 import {
@@ -12,8 +12,11 @@ import {
 
 import styles from './styles';
 import PageHeader from '../../componenets/PageHeader';
-import { debounce } from 'debounce';
+import debounce from 'lodash/debounce';
 import { getSequence } from '../../utils/async_storage';
+import useDebounce from '../../utils/use_debounce';
+import Sound from 'react-native-sound';
+import { getSound, playSound } from '../../utils/get_sound';
 
 const SequencePlayPage = ({ route, navigation }) => {
   const { sequenceId } = route.params;
@@ -21,6 +24,8 @@ const SequencePlayPage = ({ route, navigation }) => {
   const portraitWidth = Dimensions.get('window').width;
   const badgeSize = 200;
   const gap = 10;
+
+  const [scrollRef, setScrollRef] = useState(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -31,6 +36,13 @@ const SequencePlayPage = ({ route, navigation }) => {
     color: '',
     phases: [],
   });
+
+  /*
+    Короче этот state нужен для того, чтобы убирать звуки с useEffect если сдвиг на фазу
+    был вызван таймером, а не юзером. Т.к useEffect срабатывает сразу все разы после 
+    сворачивания / разворачивания приложения, этот state - число, а не boolean.
+  */
+  const [phaseMovedByTimerCount, setPhaseMovedByTimerCount] = useState(0);
   const [currentPhaseIndex, setCurrentPhaseIndex] = useState(-1);
 
   useEffect(() => {
@@ -39,7 +51,6 @@ const SequencePlayPage = ({ route, navigation }) => {
     getSequence(
       sequenceId,
       (data) => {
-        console.log('onSuccess data', data);
         setSequenceData(data);
         setCurrentPhaseIndex(0);
 
@@ -50,7 +61,7 @@ const SequencePlayPage = ({ route, navigation }) => {
         setCurrentPhaseIndex(-1);
         setIsLoading(false);
         setError(true);
-        console.log('exception', e);
+        console.warn('exception', e);
       }
     );
   }, []);
@@ -72,34 +83,135 @@ const SequencePlayPage = ({ route, navigation }) => {
     }
   };
 
+  const debouncedCurrentPhaseIndex = useDebounce(currentPhaseIndex, 200);
   useEffect(() => {
-    if (currentPhaseIndex !== -1) {
-      const timeArr = sequenceData.phases[currentPhaseIndex].time
+    console.log('New phase', debouncedCurrentPhaseIndex);
+    if (debouncedCurrentPhaseIndex !== -1) {
+      if (isPlaying) {
+        if (phaseMovedByTimerCount === 0) playSound(transitionSound);
+        else setPhaseMovedByTimerCount(phaseMovedByTimerCount - 1);
+      }
+
+      const timeArr = sequenceData.phases[debouncedCurrentPhaseIndex].time
         .split(':')
         .map((e) => parseInt(e, 10));
       setSecondsLeft(timeArr[0] * 60 + timeArr[1]);
-
-      //some code to handle phase change
+      console.log(timeArr[0] * 60 + timeArr[1]);
     }
-  }, [currentPhaseIndex]);
+  }, [debouncedCurrentPhaseIndex]);
 
-  // useEffect(() => {
-  //   if (isPlaying) startTimer();
-  //     else BackgroundTimer.stopBackgroundTimer();
+  const debouncedIsPlaying = useDebounce(isPlaying, 200);
+  useEffect(() => {
+    if (debouncedIsPlaying) startTimer();
+    else stopTimer();
+  }, [debouncedIsPlaying]);
 
-  //   return () => {
-  //     BackgroundTimer.stopBackgroundTimer();
-  //   };
-  // }, isPlaying);
+  const [transitionSound, setTransitionSound] = useState(null);
+  const [endSound, setEndSound] = useState(null);
+  useEffect(() => {
+    Sound.setCategory('Playback');
+    setTransitionSound(getSound('ding'));
+    setEndSound(getSound('ding_ding_ding'));
+
+    return () => {
+      stopTimer();
+      if (transitionSound) transitionSound.release();
+      if (endSound) endSound.release();
+    };
+  }, []);
+
+  const stopTimer = () => {
+    console.log('stopped');
+    BackgroundTimer.stopBackgroundTimer();
+  };
+
+  const startTimer = () => {
+    console.log('started');
+    BackgroundTimer.stopBackgroundTimer();
+    BackgroundTimer.runBackgroundTimer(() => {
+      if (isPlaying) {
+        setSecondsLeft((seconds) => {
+          console.log('ping');
+          setCurrentPhaseIndex((phaseIndex) => {
+            console.log('inside inside phase index', phaseIndex);
+            console.log('inside inside seconds', seconds);
+            return phaseIndex;
+          });
+          if (seconds > 1) return seconds - 1;
+          else {
+            /* Внутри коллбека setState1 я не могу получить доступ к up-to-date версии state2,
+            но могу получать up-to-date state1 и state2 внутри коллбека setState2 внутри 
+            коллбека setState1. Це реально мерзость.
+            */
+            setCurrentPhaseIndex((phaseIndex) => {
+              if (phaseIndex === sequenceData.phases.length - 1) {
+                stopTimer();
+                setIsPlaying(false);
+                playSound(endSound);
+                // console.log('END SOUND')
+                return phaseIndex;
+              } else {
+                scrollRef.scrollTo({
+                  x: (phaseIndex + 1) * (gap + gap + badgeSize),
+                  y: 0,
+                  animated: true,
+                });
+                console.log('current phase index', phaseIndex);
+
+                const timeArr = sequenceData.phases[phaseIndex + 1].time
+                  .split(':')
+                  .map((e) => parseInt(e, 10));
+                setSecondsLeft(timeArr[0] * 60 + timeArr[1]);
+                console.log(timeArr[0] * 60 + timeArr[1]);
+
+                // console.log('TRANSITION SOUND');
+                playSound(transitionSound);
+                setPhaseMovedByTimerCount((count) => count + 1);
+
+                return phaseIndex + 1;
+              }
+            });
+
+            return 0;
+          }
+        });
+        // console.log('secondsLeft', secondsLeft)
+        // if (secondsLeft <= 0)
+        //   setCurrentPhaseIndex((phaseIndex) => {
+        //     if (phaseIndex === sequenceData.phases.length - 1) {
+        //       stopTimer(endSound);
+        //       setIsPlaying(false);
+        //       return phaseIndex;
+        //     } else {
+        //       scrollRef.scrollTo({
+        //         x: (phaseIndex + 2) * (gap + gap + badgeSize),
+        //         y: 0,
+        //         animated: true,
+        //       });
+        //       console.log('current phase index', phaseIndex);
+
+        //       const timeArr = sequenceData.phases[phaseIndex + 1].time
+        //         .split(':')
+        //         .map((e) => parseInt(e, 10));
+        //       setSecondsLeft(timeArr[0] * 60 + timeArr[1]);
+        //       console.log(timeArr[0] * 60 + timeArr[1]);
+
+        //       console.log('SOUND');
+
+        //       return phaseIndex + 1;
+        //     }
+        //   });
+      }
+    }, 1000);
+  };
 
   const formatTime = (time) => (time < 10 ? `0${time}` : time);
 
-  const clockify = (secondsLeft) =>
-    `${formatTime(Math.floor(secondsLeft / 60))} : ${formatTime(
+  const clockify = (secondsLeft) => {
+    return `${formatTime(Math.floor(secondsLeft / 60))} : ${formatTime(
       secondsLeft % 60
     )}`;
-
-  console.log(sequenceData.name);
+  };
 
   return (
     <View style={styles.wrapper}>
@@ -147,6 +259,9 @@ const SequencePlayPage = ({ route, navigation }) => {
             <Text style={styles.timeText}>{clockify(secondsLeft)}</Text>
             <View style={styles.phasesWrapper}>
               <ScrollView
+                ref={(ref) => {
+                  setScrollRef(ref);
+                }}
                 style={{ maxHeight: badgeSize }}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{

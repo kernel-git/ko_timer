@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/core';
 import isEmpty from 'lodash/isEmpty';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, Text, View } from 'react-native';
@@ -20,13 +21,18 @@ const SequenceListPage = ({ navigation }) => {
   const [updateFlag, setUpdateFlag] = useState(false);
   const triggerUpdate = () => setUpdateFlag(!updateFlag);
 
-  useEffect(() => triggerUpdate(), []);
+  // useEffect(() => triggerUpdate(), []);
+
+  const isFocused = useIsFocused();
+
+  useEffect(() => { if (isFocused) triggerUpdate(); }, [isFocused]);
 
   useEffect(() => {
     setIsLoading(true);
     setError(false);
     getAllSequences(
       (data) => {
+        console.log('all sequences data fetched')
         setSequenceData(data);
         setIsLoading(false);
       },
@@ -34,7 +40,7 @@ const SequenceListPage = ({ navigation }) => {
         setSequenceData([]);
         setIsLoading(false);
         setError(true);
-        console.log('exception', e);
+        console.warn('exception', e);
       }
     );
   }, [updateFlag]);

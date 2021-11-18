@@ -3,12 +3,10 @@ import constant from 'lodash/constant';
 import { MOCK_SEQUENCE_DATA } from './mock_data';
 
 const storeData = async (storageKey, value, onSuccess, onError) => {
-  console.log('ping')
   try {
     const jsonValue = JSON.stringify(value);
     await AsyncStorage.setItem(`@${storageKey}`, jsonValue);
 
-    console.log(`key: @${storageKey}, value: ${jsonValue}`);
     onSuccess();
   } catch (e) {
     onError(e);
@@ -33,7 +31,7 @@ const getAllSpecificData = async (type, onSuccess, onError) => {
       keys.filter((key) => key.match(typeRegex))
     );
 
-    const parsedValues = jsonValues.map((pair) => (pair.at(-1) != null ? JSON.parse(pair.at(-1)) : null))
+    const parsedValues = jsonValues.map((pair) => (pair[1] != null ? JSON.parse(pair[1]) : null))
     onSuccess(parsedValues);
   } catch (e) {
     onError(e);
@@ -44,7 +42,7 @@ const resetProvidedData = async (
   type,
   data,
   onSuccess = () => console.log('Seeds applied successfully'),
-  onError = (e) => console.log('Seeds failed with exception:', e)
+  onError = (e) => console.warn('Seeds failed with exception:', e)
 ) => {
   try {
     const keys = await AsyncStorage.getAllKeys();

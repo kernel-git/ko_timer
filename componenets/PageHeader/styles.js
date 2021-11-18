@@ -3,7 +3,7 @@ import { StyleSheet } from 'react-native';
 const styles = StyleSheet.create({
   headerWrapper: {
     padding: 5,
-    marginTop: 25,
+    marginTop: 5,
     height: '10%',
     width: '100%',
     display: 'flex',

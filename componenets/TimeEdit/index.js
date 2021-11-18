@@ -10,7 +10,7 @@ const TimeEdit = ({ time, handleUpdate }) => {
   const [seconds, setSeconds] = useState(parseInt(time.slice(-2)));
 
   useEffect(
-    () => handleUpdate(`${minutes.toString()}:${seconds.toString()}`),
+    () => handleUpdate(`${minutes < 10 ? '0': ''}${minutes.toString()}:${seconds < 10 ? '0': ''}${seconds.toString()}`),
     [minutes, seconds]
   );
 
